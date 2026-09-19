@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#172a2a">
+  <link rel="manifest" href="manifest.json">
   <title>The Brillantes Bill Tracker System | Monthly Bills</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,6 +50,8 @@
     .month-picker { display: flex; align-items: center; gap: 10px; }
     .month-picker label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
     input[type="month"] { border: 1px solid var(--line); background: var(--card); border-radius: 8px; color: var(--ink); padding: 10px 12px; }
+    .account-button { border: 0; border-radius: 8px; background: var(--ink); color: white; padding: 10px 15px; font-size: 12px; font-weight: 800; }
+    .account-button:hover { background: var(--mint-deep); }
 
     .hero { display: grid; grid-template-columns: 1.35fr .65fr; gap: 22px; margin-bottom: 22px; }
     .hero-card { background: var(--ink); color: white; border-radius: 18px; padding: 30px; position: relative; overflow: hidden; box-shadow: var(--shadow); }
@@ -98,6 +101,18 @@
     .add-button:hover { background: #d96753; transform: translateY(-1px); }
     .notice { min-height: 20px; color: var(--mint-deep); font-size: 12px; margin: 12px 0 0; }
 
+    .modal-backdrop { position: fixed; inset: 0; display: none; place-items: center; padding: 20px; background: rgba(23, 42, 42, .45); z-index: 10; }
+    .modal-backdrop.open { display: grid; }
+    .auth-modal { width: min(100%, 420px); background: var(--card); border-radius: 16px; padding: 26px; box-shadow: 0 24px 80px rgba(23, 42, 42, .2); }
+    .modal-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 22px; }
+    .modal-heading p { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 7px 0 0; }
+    .close-modal { border: 0; background: transparent; color: var(--muted); font-size: 23px; line-height: 1; padding: 0 3px; }
+    .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--paper); border-radius: 8px; padding: 4px; margin-bottom: 20px; }
+    .auth-tab { border: 0; border-radius: 6px; padding: 9px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 800; }
+    .auth-tab.active { color: var(--ink); background: white; box-shadow: 0 2px 7px rgba(23, 42, 42, .08); }
+    .auth-submit { width: 100%; border: 0; border-radius: 8px; padding: 13px; color: white; background: var(--coral); font-weight: 800; }
+    .auth-message { min-height: 18px; color: var(--mint-deep); font-size: 12px; margin: 12px 0 0; }
+
     @media (max-width: 760px) {
       .shell { width: min(100% - 24px, 600px); padding-top: 28px; }
       .topbar, .month-picker { align-items: flex-start; flex-direction: column; }
@@ -126,6 +141,7 @@
       <div class="month-picker">
         <label for="month">Viewing</label>
         <input id="month" type="month">
+        <button class="account-button" id="account-button" type="button">Log in / Sign up</button>
       </div>
     </header>
 
@@ -170,6 +186,25 @@
     </section>
   </main>
 
+  <div class="modal-backdrop" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <section class="auth-modal">
+      <div class="modal-heading">
+        <div><h2 id="auth-title">Welcome back</h2><p id="auth-subtitle">Sign in to keep your tracker close.</p></div>
+        <button class="close-modal" id="close-auth" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab active" data-auth-mode="login" type="button" role="tab">Log in</button>
+        <button class="auth-tab" data-auth-mode="signup" type="button" role="tab">Sign up</button>
+      </div>
+      <form id="auth-form">
+        <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" placeholder="you@example.com" required></div>
+        <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" minlength="6" placeholder="At least 6 characters" required></div>
+        <button class="auth-submit" id="auth-submit" type="submit">Log in</button>
+        <div class="auth-message" id="auth-message" role="status"></div>
+      </form>
+    </section>
+  </div>
+
   <script>
     const storageKey = "ledgerline-bills";
     const today = new Date();
@@ -183,6 +218,9 @@
     const monthTitle = document.querySelector("#month-title");
     const billList = document.querySelector("#bill-list");
     const notice = document.querySelector("#notice");
+    const authModal = document.querySelector("#auth-modal");
+    const accountButton = document.querySelector("#account-button");
+    let authMode = "login";
 
     monthInput.value = selectedMonth;
     document.querySelector("#due-date").value = `${selectedMonth}-01`;
@@ -274,7 +312,35 @@
       render();
     });
 
+    function updateAuthMode(mode) {
+      authMode = mode;
+      document.querySelectorAll(".auth-tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.authMode === mode));
+      document.querySelector("#auth-title").textContent = mode === "login" ? "Welcome back" : "Create your account";
+      document.querySelector("#auth-subtitle").textContent = mode === "login" ? "Sign in to keep your tracker close." : "Start your household bill tracker.";
+      document.querySelector("#auth-submit").textContent = mode === "login" ? "Log in" : "Sign up";
+      document.querySelector("#auth-message").textContent = "";
+    }
+
+    accountButton.addEventListener("click", () => authModal.classList.add("open"));
+    document.querySelector("#close-auth").addEventListener("click", () => authModal.classList.remove("open"));
+    authModal.addEventListener("click", (event) => { if (event.target === authModal) authModal.classList.remove("open"); });
+    document.querySelectorAll(".auth-tab").forEach((tab) => tab.addEventListener("click", () => updateAuthMode(tab.dataset.authMode)));
+    document.querySelector("#auth-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const email = document.querySelector("#auth-email").value.trim();
+      localStorage.setItem("brillantes-account", email);
+      document.querySelector("#auth-message").textContent = authMode === "login" ? "You are logged in on this device." : "Your local account has been created.";
+      accountButton.textContent = email;
+      window.setTimeout(() => authModal.classList.remove("open"), 900);
+    });
+    const savedAccount = localStorage.getItem("brillantes-account");
+    if (savedAccount) accountButton.textContent = savedAccount;
+
     render();
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js");
+    }
   </script>
 </body>
 </html>
