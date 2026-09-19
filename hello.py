@@ -3,3 +3,4 @@ age = input("How old are you? ")
 
 print(f"Hello, {name}!")
 print(f"You are {age} years old.")
+print("Welcome to my first Python project!")
