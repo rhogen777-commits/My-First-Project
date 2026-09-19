@@ -87,7 +87,11 @@
     .bill-name { font-weight: 800; font-size: 14px; }
     .bill-date { color: var(--muted); font-size: 11px; margin-top: 3px; }
     .bill-amount { font: 500 14px "DM Mono", monospace; white-space: nowrap; }
-    .delete { border: 0; background: transparent; color: #9aa7a2; width: 28px; height: 28px; font-size: 17px; border-radius: 6px; }
+    .bill-actions { display: flex; align-items: center; gap: 3px; }
+    .edit-button, .delete { border: 0; background: transparent; color: #9aa7a2; width: 28px; height: 28px; border-radius: 6px; }
+    .edit-button { font-size: 13px; }
+    .edit-button:hover { color: var(--mint-deep); background: #eaf6ef; }
+    .delete { font-size: 17px; }
     .delete:hover { color: var(--coral); background: #fff0ec; }
     .empty { text-align: center; padding: 42px 18px; color: var(--muted); border: 1px dashed var(--line); border-radius: 11px; font-size: 13px; }
 
@@ -99,6 +103,7 @@
     .field input:focus { border-color: var(--mint-deep); box-shadow: 0 0 0 3px rgba(48, 125, 98, .12); }
     .add-button { width: 100%; border: 0; border-radius: 8px; padding: 13px; color: white; background: var(--coral); font-weight: 800; transition: transform .2s, background .2s; }
     .add-button:hover { background: #d96753; transform: translateY(-1px); }
+    .cancel-button { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 11px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 800; margin-top: 8px; }
     .notice { min-height: 20px; color: var(--mint-deep); font-size: 12px; margin: 12px 0 0; }
 
     .modal-backdrop { position: fixed; inset: 0; display: none; place-items: center; padding: 20px; background: rgba(23, 42, 42, .45); z-index: 10; }
@@ -173,13 +178,14 @@
         <div class="bill-list" id="bill-list"></div>
       </div>
       <aside class="panel form-panel">
-        <h2>Add a bill</h2>
+        <h2 id="form-title">Add a bill</h2>
         <p>Give each recurring expense a date. You can change its status from the schedule when it is paid.</p>
         <form id="bill-form">
           <div class="field"><label for="name">Bill name</label><input id="name" name="name" type="text" placeholder="e.g. Internet" required></div>
           <div class="field"><label for="amount">Amount</label><input id="amount" name="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required></div>
           <div class="field"><label for="due-date">Due date</label><input id="due-date" name="due-date" type="date" required></div>
-          <button class="add-button" type="submit">Add to schedule</button>
+          <button class="add-button" id="form-submit" type="submit">Add to schedule</button>
+          <button class="cancel-button" id="cancel-edit" type="button" hidden>Cancel edit</button>
           <div class="notice" id="notice" role="status"></div>
         </form>
       </aside>
@@ -209,7 +215,14 @@
     const storageKey = "ledgerline-bills";
     const today = new Date();
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-    let bills = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    const defaultBills = [
+      { id: "electricity-bill", name: "Electricity Bill", amount: 2750, dueDate: "2026-09-01", paid: false },
+      { id: "tablet", name: "Tablet", amount: 2500, dueDate: "2026-09-15", paid: false },
+      { id: "water-bill", name: "Water Bill", amount: 890, dueDate: "2026-09-23", paid: false },
+      { id: "piggery-feeds", name: "Piggery Feeds", amount: 2099.99, dueDate: "2026-09-25", paid: false }
+    ];
+    const savedBills = localStorage.getItem(storageKey);
+    let bills = savedBills ? JSON.parse(savedBills) : defaultBills;
     let selectedMonth = currentMonth;
     let showAllBills = false;
     const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -262,7 +275,7 @@
           <button class="check ${bill.paid ? "done" : ""}" data-action="toggle" data-id="${bill.id}" aria-label="${bill.paid ? "Mark unpaid" : "Mark paid"}" title="${bill.paid ? "Mark unpaid" : "Mark paid"}">${bill.paid ? "✓" : ""}</button>
           <div><div class="bill-name">${escapeHtml(bill.name)}</div><div class="bill-date">Due ${due}${bill.paid ? " · Paid" : ""}</div></div>
           <div class="bill-amount">${money.format(bill.amount)}</div>
-          <button class="delete" data-action="delete" data-id="${bill.id}" aria-label="Delete ${escapeHtml(bill.name)}" title="Delete bill">×</button>
+          <div class="bill-actions"><button class="edit-button" data-action="edit" data-id="${bill.id}" aria-label="Edit ${escapeHtml(bill.name)}" title="Edit bill">✎</button><button class="delete" data-action="delete" data-id="${bill.id}" aria-label="Delete ${escapeHtml(bill.name)}" title="Delete bill">×</button></div>
         </article>`;
       }).join("");
     }
@@ -271,20 +284,43 @@
       return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
     }
 
-    document.querySelector("#bill-form").addEventListener("submit", (event) => {
+    let editingBillId = null;
+    const billForm = document.querySelector("#bill-form");
+    const formTitle = document.querySelector("#form-title");
+    const formSubmit = document.querySelector("#form-submit");
+    const cancelEdit = document.querySelector("#cancel-edit");
+
+    function resetBillForm() {
+      editingBillId = null;
+      billForm.reset();
+      document.querySelector("#due-date").value = `${selectedMonth}-01`;
+      formTitle.textContent = "Add a bill";
+      formSubmit.textContent = "Add to schedule";
+      cancelEdit.hidden = true;
+    }
+
+    billForm.addEventListener("submit", (event) => {
       event.preventDefault();
       const form = new FormData(event.target);
+      const name = form.get("name").trim();
       const amount = Number(form.get("amount"));
       const dueDate = form.get("due-date");
-      if (!Number.isFinite(amount) || amount <= 0 || !dueDate) return;
-      bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name: form.get("name").trim(), amount, dueDate, paid: false });
+      if (!name || !Number.isFinite(amount) || amount <= 0 || !dueDate) return;
+      if (editingBillId) {
+        const bill = bills.find((item) => item.id === editingBillId);
+        bill.name = name;
+        bill.amount = amount;
+        bill.dueDate = dueDate;
+        notice.textContent = "Bill updated.";
+      } else {
+        bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, amount, dueDate, paid: false });
+        notice.textContent = "Bill added to your schedule.";
+      }
       save();
       selectedMonth = dueDate.slice(0, 7);
       showAllBills = false;
       monthInput.value = selectedMonth;
-      event.target.reset();
-      document.querySelector("#due-date").value = `${selectedMonth}-01`;
-      notice.textContent = "Bill added to your schedule.";
+      resetBillForm();
       window.setTimeout(() => { notice.textContent = ""; }, 2600);
       render();
     });
@@ -295,10 +331,23 @@
       const bill = bills.find((item) => item.id === button.dataset.id);
       if (!bill) return;
       if (button.dataset.action === "toggle") bill.paid = !bill.paid;
+      if (button.dataset.action === "edit") {
+        editingBillId = bill.id;
+        document.querySelector("#name").value = bill.name;
+        document.querySelector("#amount").value = bill.amount;
+        document.querySelector("#due-date").value = bill.dueDate;
+        formTitle.textContent = "Edit bill";
+        formSubmit.textContent = "Save changes";
+        cancelEdit.hidden = false;
+        document.querySelector(".form-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
       if (button.dataset.action === "delete") bills = bills.filter((item) => item.id !== button.dataset.id);
       save();
       render();
     });
+
+    cancelEdit.addEventListener("click", resetBillForm);
 
     monthInput.addEventListener("change", () => {
       selectedMonth = monthInput.value || currentMonth;

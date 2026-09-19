@@ -1,4 +1,4 @@
-const CACHE_NAME = "brillantes-bills-v1";
+const CACHE_NAME = "brillantes-bills-v2";
 const APP_FILES = ["./", "./index.html", "./manifest.json", "./icon.svg"];
 
 self.addEventListener("install", (event) => {
