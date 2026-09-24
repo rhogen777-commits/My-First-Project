@@ -3,6 +3,20 @@
   "version": "1.0.0",
   "private": true,
   "description": "The Brillantes Bill Tracker System",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rhogen777-commits/My-First-Project.git"
+  },
+  "homepage": "https://rhogen777-commits.github.io/My-First-Project/",
+  "bugs": {
+    "url": "https://github.com/rhogen777-commits/My-First-Project/issues"
+  },
+  "keywords": [
+    "bill-tracker",
+    "budget",
+    "monthly-bills",
+    "household-finance"
+  ],
   "scripts": {
     "start": "node server.js"
   }
