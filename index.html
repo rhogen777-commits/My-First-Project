@@ -39,6 +39,26 @@
       background: linear-gradient(90deg, var(--coral) 0 29%, var(--yellow) 29% 53%, var(--mint-deep) 53% 100%);
     }
 
+    .cover {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      background: var(--ink);
+      color: white;
+      text-align: center;
+    }
+    .cover-card { width: min(100%, 680px); }
+    .cover-mark { width: 58px; height: 58px; display: grid; place-items: center; margin: 0 auto 24px; border: 1px solid var(--mint); border-radius: 16px; color: var(--mint); font: 800 28px "Manrope", sans-serif; transform: rotate(-7deg); }
+    .cover-kicker { color: var(--mint); font: 500 12px "DM Mono", monospace; text-transform: uppercase; letter-spacing: .14em; }
+    .cover h1 { max-width: none; margin: 18px 0 18px; font-size: clamp(38px, 7vw, 76px); letter-spacing: -.07em; line-height: .95; }
+    .cover p { max-width: 460px; margin: 0 auto 30px; color: #b8c9c3; font-size: 15px; line-height: 1.7; }
+    .cover-enter { border: 0; border-radius: 8px; padding: 14px 22px; color: var(--ink); background: var(--mint); font-weight: 800; }
+    .cover-enter:hover { background: white; }
+    .cover.hidden { display: none; }
+
     button, input { font: inherit; }
     button { cursor: pointer; }
     .shell { width: min(1160px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 56px; }
@@ -138,6 +158,15 @@
   </style>
 </head>
 <body>
+  <section class="cover" id="cover" aria-labelledby="cover-title">
+    <div class="cover-card">
+      <div class="cover-mark">B</div>
+      <div class="cover-kicker">Household records</div>
+      <h1 id="cover-title">The Brillantes Property Files</h1>
+      <p>A shared place to keep the household bills, dates, and paid records in view.</p>
+      <button class="cover-enter" id="cover-enter" type="button">Open the bill tracker</button>
+    </div>
+  </section>
   <main class="shell">
     <header class="topbar">
       <div class="brand">
@@ -245,6 +274,8 @@
     let selectedMonth = currentMonth;
     let showAllBills = false;
     const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+    const cover = document.querySelector("#cover");
+    document.querySelector("#cover-enter").addEventListener("click", () => cover.classList.add("hidden"));
 
     const monthInput = document.querySelector("#month");
     const monthTitle = document.querySelector("#month-title");
