@@ -304,7 +304,7 @@
     ];
     const savedBills = localStorage.getItem(storageKey);
     let bills = savedBills ? JSON.parse(savedBills) : defaultBills;
-    bills = bills.map((bill) => ({ ...bill, paidAt: bill.paidAt || null }));
+    bills = bills.map((bill) => ({ ...bill, paidAt: bill.paidAt || null, paidAmount: bill.paidAmount ?? null, paidName: bill.paidName || null }));
     let currentUser = null;
     let unsubscribeBills = null;
     let selectedMonth = currentMonth;
@@ -352,7 +352,7 @@
         }
         bills = snapshot.docs.map((document) => {
           const bill = document.data();
-          return { ...bill, paidAt: bill.paidAt || null };
+          return { ...bill, paidAt: bill.paidAt || null, paidAmount: bill.paidAmount ?? null, paidName: bill.paidName || null };
         });
         localStorage.setItem(storageKey, JSON.stringify(bills));
         render();
@@ -393,19 +393,19 @@
       const annualPaidBills = bills
         .filter((bill) => bill.paid && bill.paidAt && bill.paidAt.startsWith(`${selectedAnnualYear}-`))
         .sort((a, b) => a.paidAt.localeCompare(b.paidAt) || a.name.localeCompare(b.name));
-      const annualTotal = annualPaidBills.reduce((sum, bill) => sum + bill.amount, 0);
+      const annualTotal = annualPaidBills.reduce((sum, bill) => sum + (bill.paidAmount ?? bill.amount), 0);
       document.querySelector("#annual-paid-total").textContent = money.format(annualTotal);
       document.querySelector("#annual-paid-count").textContent = String(annualPaidBills.length);
       const annualList = document.querySelector("#annual-paid-list");
       annualList.innerHTML = annualPaidBills.length
-        ? annualPaidBills.map((bill) => `<div class="annual-paid-row"><span class="annual-paid-name">${escapeHtml(bill.name)}</span><time class="annual-paid-date" datetime="${bill.paidAt}">${displayPaidDate(bill.paidAt)}</time><span class="annual-paid-amount">${money.format(bill.amount)}</span></div>`).join("")
+        ? annualPaidBills.map((bill) => `<div class="annual-paid-row"><span class="annual-paid-name">${escapeHtml(bill.paidName || bill.name)}</span><time class="annual-paid-date" datetime="${bill.paidAt}">${displayPaidDate(bill.paidAt)}</time><span class="annual-paid-amount">${money.format(bill.paidAmount ?? bill.amount)}</span></div>`).join("")
         : `<div class="empty">No bills were marked paid in ${selectedAnnualYear}.</div>`;
 
       const legacyBills = bills.filter((bill) => bill.paid && !bill.paidAt);
       const legacyNote = document.querySelector("#annual-legacy");
       legacyNote.hidden = !legacyBills.length;
       if (legacyBills.length) {
-        legacyNote.innerHTML = `These paid records don't have a payment date saved, so they aren't included in a specific year's total.<ul>${legacyBills.map((bill) => `<li>${escapeHtml(bill.name)} — ${money.format(bill.amount)} (date not recorded)</li>`).join("")}</ul>`;
+        legacyNote.innerHTML = `These paid records don't have a payment date saved, so they aren't included in a specific year's total.<ul>${legacyBills.map((bill) => `<li>${escapeHtml(bill.paidName || bill.name)} — ${money.format(bill.paidAmount ?? bill.amount)} (date not recorded)</li>`).join("")}</ul>`;
       }
     }
 
@@ -476,7 +476,7 @@
         bill.dueDate = dueDate;
         notice.textContent = "Bill updated.";
       } else {
-        bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, amount, dueDate, paid: false, paidAt: null });
+        bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, amount, dueDate, paid: false, paidAt: null, paidAmount: null, paidName: null });
         notice.textContent = "Bill added to your schedule.";
       }
       await save();
@@ -496,6 +496,8 @@
       if (button.dataset.action === "toggle") {
         bill.paid = !bill.paid;
         bill.paidAt = bill.paid ? localDateISO() : null;
+        bill.paidAmount = bill.paid ? bill.amount : null;
+        bill.paidName = bill.paid ? bill.name : null;
       }
       if (button.dataset.action === "edit") {
         editingBillId = bill.id;
