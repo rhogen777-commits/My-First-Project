@@ -70,6 +70,8 @@
     .month-picker { display: flex; align-items: center; gap: 10px; }
     .month-picker label { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
     input[type="month"] { border: 1px solid var(--line); background: var(--card); border-radius: 8px; color: var(--ink); padding: 10px 12px; }
+    .annual-year { border: 1px solid var(--line); background: var(--card); border-radius: 8px; color: var(--ink); padding: 9px 12px; }
+    .annual-year-label { margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
     .account-button { border: 0; border-radius: 8px; background: var(--ink); color: white; padding: 10px 15px; font-size: 12px; font-weight: 800; }
     .account-button:hover { background: var(--mint-deep); }
 
@@ -92,6 +94,18 @@
     .stat-value { display: block; font: 500 25px "DM Mono", monospace; margin-top: 8px; letter-spacing: -.06em; }
     .stat-value.coral { color: #cb5742; }
     .stat-value.green { color: var(--mint-deep); }
+
+    .annual-summary { margin-bottom: 32px; }
+    .annual-summary-stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+    .annual-summary-stat { min-width: 150px; padding: 14px 16px; background: var(--paper); border-radius: 10px; }
+    .annual-summary-stat span { display: block; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .annual-summary-stat strong { display: block; margin-top: 5px; font: 500 20px "DM Mono", monospace; }
+    .annual-paid-list { display: grid; gap: 8px; }
+    .annual-paid-row { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }
+    .annual-paid-name { font-size: 13px; font-weight: 800; }
+    .annual-paid-date, .annual-paid-amount { color: var(--muted); font: 12px "DM Mono", monospace; white-space: nowrap; }
+    .annual-legacy { margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .annual-legacy ul { margin: 8px 0 0; padding-left: 20px; }
 
     .workspace { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr); gap: 22px; align-items: start; }
     .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
@@ -150,6 +164,12 @@
       .stat { padding: 14px 12px; }
       .stat-value { font-size: 19px; }
       .stat-label { font-size: 10px; }
+      .annual-summary .panel-heading { flex-wrap: wrap; }
+      .annual-summary h2 { width: 100%; }
+      .annual-year-label { margin-left: 0; }
+      .annual-paid-row { grid-template-columns: 1fr auto; gap: 6px 12px; }
+      .annual-paid-date { grid-column: 1; grid-row: 2; }
+      .annual-paid-amount { grid-column: 2; grid-row: 1 / span 2; }
       .form-panel { position: static; }
       .bill { grid-template-columns: auto 1fr auto; }
       .bill-amount { grid-column: 2; grid-row: 2; }
@@ -200,6 +220,20 @@
       <div class="stat"><span class="stat-label">Total due</span><strong class="stat-value" id="total">$0.00</strong></div>
       <div class="stat"><span class="stat-label">Paid</span><strong class="stat-value green" id="paid">$0.00</strong></div>
       <div class="stat"><span class="stat-label">Still to pay</span><strong class="stat-value coral" id="remaining">$0.00</strong></div>
+    </section>
+
+    <section class="panel annual-summary" aria-labelledby="annual-title">
+      <div class="panel-heading">
+        <h2 id="annual-title">Annual paid-bill summary</h2>
+        <label for="annual-year" class="annual-year-label">Year</label>
+        <select id="annual-year" class="annual-year" aria-label="Summary year"></select>
+      </div>
+      <div class="annual-summary-stats">
+        <div class="annual-summary-stat"><span>Paid this year</span><strong id="annual-paid-total">₱0.00</strong></div>
+        <div class="annual-summary-stat"><span>Number of bills</span><strong id="annual-paid-count">0</strong></div>
+      </div>
+      <div class="annual-paid-list" id="annual-paid-list"></div>
+      <div class="annual-legacy" id="annual-legacy" hidden></div>
     </section>
 
     <section class="workspace">
@@ -261,6 +295,7 @@
     const storageKey = "ledgerline-bills";
     const today = new Date();
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    const currentYear = String(today.getFullYear());
     const defaultBills = [
       { id: "electricity-bill", name: "Electricity Bill", amount: 2750, dueDate: "2026-09-01", paid: false },
       { id: "tablet", name: "Tablet", amount: 2500, dueDate: "2026-09-15", paid: false },
@@ -269,9 +304,11 @@
     ];
     const savedBills = localStorage.getItem(storageKey);
     let bills = savedBills ? JSON.parse(savedBills) : defaultBills;
+    bills = bills.map((bill) => ({ ...bill, paidAt: bill.paidAt || null }));
     let currentUser = null;
     let unsubscribeBills = null;
     let selectedMonth = currentMonth;
+    let selectedAnnualYear = currentYear;
     let showAllBills = false;
     const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
     const cover = document.querySelector("#cover");
@@ -283,6 +320,7 @@
     const notice = document.querySelector("#notice");
     const authModal = document.querySelector("#auth-modal");
     const accountButton = document.querySelector("#account-button");
+    const annualYearInput = document.querySelector("#annual-year");
     let authMode = "login";
 
     monthInput.value = selectedMonth;
@@ -290,23 +328,32 @@
 
     async function save() {
       localStorage.setItem(storageKey, JSON.stringify(bills));
-      if (!currentUser) return;
+      if (!currentUser) return true;
 
-      const existing = await billsCollection.get();
-      const batch = firebase.firestore().batch();
-      existing.docs.filter((document) => !bills.some((bill) => bill.id === document.id)).forEach((document) => batch.delete(document.ref));
-      bills.forEach((bill) => batch.set(billsCollection.doc(bill.id), bill));
-      await batch.commit();
+      try {
+        const existing = await billsCollection.get();
+        const batch = firebase.firestore().batch();
+        existing.docs.filter((document) => !bills.some((bill) => bill.id === document.id)).forEach((document) => batch.delete(document.ref));
+        bills.forEach((bill) => batch.set(billsCollection.doc(bill.id), bill));
+        await batch.commit();
+        return true;
+      } catch (error) {
+        notice.textContent = "Saved on this device, but could not sync to the shared account.";
+        return false;
+      }
     }
 
     function startBillSync() {
       if (unsubscribeBills) unsubscribeBills();
       unsubscribeBills = billsCollection.orderBy("dueDate").onSnapshot((snapshot) => {
         if (snapshot.empty) {
-          if (savedBills) save().catch(() => { notice.textContent = "Could not sync your bills."; });
+          if (bills.length) save();
           return;
         }
-        bills = snapshot.docs.map((document) => document.data());
+        bills = snapshot.docs.map((document) => {
+          const bill = document.data();
+          return { ...bill, paidAt: bill.paidAt || null };
+        });
         localStorage.setItem(storageKey, JSON.stringify(bills));
         render();
       }, () => {
@@ -319,7 +366,51 @@
       return new Date(year, month - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
     }
 
+    function localDateISO(date = new Date()) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function displayPaidDate(value) {
+      const [year, month, day] = value.split("-").map(Number);
+      const date = new Date(year, month - 1, day, 12);
+      const weekday = new Intl.DateTimeFormat("en-PH", { weekday: "short" }).format(date);
+      return `${weekday}, ${String(day).padStart(2, "0")}-${String(month).padStart(2, "0")}-${year}`;
+    }
+
+    function renderAnnualSummary() {
+      const years = new Set([currentYear]);
+      bills.forEach((bill) => {
+        if (bill.dueDate) years.add(bill.dueDate.slice(0, 4));
+        if (bill.paidAt) years.add(bill.paidAt.slice(0, 4));
+      });
+      if (!years.has(selectedAnnualYear)) years.add(selectedAnnualYear);
+      annualYearInput.innerHTML = [...years].sort((a, b) => b.localeCompare(a)).map((year) => `<option value="${year}">${year}</option>`).join("");
+      annualYearInput.value = selectedAnnualYear;
+
+      const annualPaidBills = bills
+        .filter((bill) => bill.paid && bill.paidAt && bill.paidAt.startsWith(`${selectedAnnualYear}-`))
+        .sort((a, b) => a.paidAt.localeCompare(b.paidAt) || a.name.localeCompare(b.name));
+      const annualTotal = annualPaidBills.reduce((sum, bill) => sum + bill.amount, 0);
+      document.querySelector("#annual-paid-total").textContent = money.format(annualTotal);
+      document.querySelector("#annual-paid-count").textContent = String(annualPaidBills.length);
+      const annualList = document.querySelector("#annual-paid-list");
+      annualList.innerHTML = annualPaidBills.length
+        ? annualPaidBills.map((bill) => `<div class="annual-paid-row"><span class="annual-paid-name">${escapeHtml(bill.name)}</span><time class="annual-paid-date" datetime="${bill.paidAt}">${displayPaidDate(bill.paidAt)}</time><span class="annual-paid-amount">${money.format(bill.amount)}</span></div>`).join("")
+        : `<div class="empty">No bills were marked paid in ${selectedAnnualYear}.</div>`;
+
+      const legacyBills = bills.filter((bill) => bill.paid && !bill.paidAt);
+      const legacyNote = document.querySelector("#annual-legacy");
+      legacyNote.hidden = !legacyBills.length;
+      if (legacyBills.length) {
+        legacyNote.innerHTML = `These paid records don't have a payment date saved, so they aren't included in a specific year's total.<ul>${legacyBills.map((bill) => `<li>${escapeHtml(bill.name)} — ${money.format(bill.amount)} (date not recorded)</li>`).join("")}</ul>`;
+      }
+    }
+
     function render() {
+      renderAnnualSummary();
       const scheduleBills = (showAllBills ? bills : bills.filter((bill) => bill.dueDate.startsWith(selectedMonth))).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
       const monthBills = bills.filter((bill) => bill.dueDate.startsWith(selectedMonth));
       const total = monthBills.reduce((sum, bill) => sum + bill.amount, 0);
@@ -385,7 +476,7 @@
         bill.dueDate = dueDate;
         notice.textContent = "Bill updated.";
       } else {
-        bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, amount, dueDate, paid: false });
+        bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, amount, dueDate, paid: false, paidAt: null });
         notice.textContent = "Bill added to your schedule.";
       }
       await save();
@@ -402,7 +493,10 @@
       if (!button) return;
       const bill = bills.find((item) => item.id === button.dataset.id);
       if (!bill) return;
-      if (button.dataset.action === "toggle") bill.paid = !bill.paid;
+      if (button.dataset.action === "toggle") {
+        bill.paid = !bill.paid;
+        bill.paidAt = bill.paid ? localDateISO() : null;
+      }
       if (button.dataset.action === "edit") {
         editingBillId = bill.id;
         document.querySelector("#name").value = bill.name;
@@ -426,6 +520,11 @@
       showAllBills = false;
       document.querySelector("#due-date").value = `${selectedMonth}-01`;
       render();
+    });
+
+    annualYearInput.addEventListener("change", () => {
+      selectedAnnualYear = annualYearInput.value;
+      renderAnnualSummary();
     });
 
     document.querySelector("#show-all").addEventListener("click", () => {
