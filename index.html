@@ -211,7 +211,22 @@
     </section>
   </div>
 
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBZFO0v7eBDM9m4ZUkHwPPM5_BqqtpILWQ",
+      authDomain: "brillantes-bill-tracker.firebaseapp.com",
+      projectId: "brillantes-bill-tracker",
+      storageBucket: "brillantes-bill-tracker.firebasestorage.app",
+      messagingSenderId: "171295774272",
+      appId: "1:171295774272:web:1d5b99b427e7a00ecb71a5",
+      measurementId: "G-41SST18KRN"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const billsCollection = firebase.firestore().collection("bills");
     const storageKey = "ledgerline-bills";
     const today = new Date();
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -223,6 +238,8 @@
     ];
     const savedBills = localStorage.getItem(storageKey);
     let bills = savedBills ? JSON.parse(savedBills) : defaultBills;
+    let currentUser = null;
+    let unsubscribeBills = null;
     let selectedMonth = currentMonth;
     let showAllBills = false;
     const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -238,8 +255,30 @@
     monthInput.value = selectedMonth;
     document.querySelector("#due-date").value = `${selectedMonth}-01`;
 
-    function save() {
+    async function save() {
       localStorage.setItem(storageKey, JSON.stringify(bills));
+      if (!currentUser) return;
+
+      const existing = await billsCollection.get();
+      const batch = firebase.firestore().batch();
+      existing.docs.filter((document) => !bills.some((bill) => bill.id === document.id)).forEach((document) => batch.delete(document.ref));
+      bills.forEach((bill) => batch.set(billsCollection.doc(bill.id), bill));
+      await batch.commit();
+    }
+
+    function startBillSync() {
+      if (unsubscribeBills) unsubscribeBills();
+      unsubscribeBills = billsCollection.orderBy("dueDate").onSnapshot((snapshot) => {
+        if (snapshot.empty) {
+          if (savedBills) save().catch(() => { notice.textContent = "Could not sync your bills."; });
+          return;
+        }
+        bills = snapshot.docs.map((document) => document.data());
+        localStorage.setItem(storageKey, JSON.stringify(bills));
+        render();
+      }, () => {
+        notice.textContent = "Could not connect to shared bills.";
+      });
     }
 
     function monthLabel(value) {
@@ -299,7 +338,7 @@
       cancelEdit.hidden = true;
     }
 
-    billForm.addEventListener("submit", (event) => {
+    billForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = new FormData(event.target);
       const name = form.get("name").trim();
@@ -316,7 +355,7 @@
         bills.push({ id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()), name, amount, dueDate, paid: false });
         notice.textContent = "Bill added to your schedule.";
       }
-      save();
+      await save();
       selectedMonth = dueDate.slice(0, 7);
       showAllBills = false;
       monthInput.value = selectedMonth;
@@ -325,7 +364,7 @@
       render();
     });
 
-    billList.addEventListener("click", (event) => {
+    billList.addEventListener("click", async (event) => {
       const button = event.target.closest("button[data-action]");
       if (!button) return;
       const bill = bills.find((item) => item.id === button.dataset.id);
@@ -343,7 +382,7 @@
         return;
       }
       if (button.dataset.action === "delete") bills = bills.filter((item) => item.id !== button.dataset.id);
-      save();
+      await save();
       render();
     });
 
@@ -374,16 +413,29 @@
     document.querySelector("#close-auth").addEventListener("click", () => authModal.classList.remove("open"));
     authModal.addEventListener("click", (event) => { if (event.target === authModal) authModal.classList.remove("open"); });
     document.querySelectorAll(".auth-tab").forEach((tab) => tab.addEventListener("click", () => updateAuthMode(tab.dataset.authMode)));
-    document.querySelector("#auth-form").addEventListener("submit", (event) => {
+    document.querySelector("#auth-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const email = document.querySelector("#auth-email").value.trim();
-      localStorage.setItem("brillantes-account", email);
-      document.querySelector("#auth-message").textContent = authMode === "login" ? "You are logged in on this device." : "Your local account has been created.";
-      accountButton.textContent = email;
-      window.setTimeout(() => authModal.classList.remove("open"), 900);
+      const password = document.querySelector("#auth-password").value;
+      const message = document.querySelector("#auth-message");
+      try {
+        if (authMode === "login") {
+          await auth.signInWithEmailAndPassword(email, password);
+        } else {
+          await auth.createUserWithEmailAndPassword(email, password);
+        }
+        message.textContent = "Signed in. Your bills are now shared.";
+        window.setTimeout(() => authModal.classList.remove("open"), 900);
+      } catch (error) {
+        message.textContent = error.message.replace("Firebase: ", "");
+      }
     });
-    const savedAccount = localStorage.getItem("brillantes-account");
-    if (savedAccount) accountButton.textContent = savedAccount;
+
+    auth.onAuthStateChanged((user) => {
+      currentUser = user;
+      accountButton.textContent = user ? user.email : "Log in / Sign up";
+      if (user) startBillSync();
+    });
 
     render();
 
