@@ -1,0 +1,10 @@
+2026-09-26 13:19:58.119 [info] StorageMainService: creating application shared storage
+2026-09-26 13:19:58.247 [info] [shared storage] Creating shared storage database at 'c:\Users\HOME\.vscode-shared\sharedStorage\state.vscdb' (wasCreated: false)
+2026-09-26 13:19:58.250 [info] [shared storage] Initializing fallback application storage (path: c:\Users\HOME\AppData\Roaming\Code\User\globalStorage\state.vscdb)
+2026-09-26 13:19:58.266 [info] update#setState disabled
+2026-09-26 13:19:58.267 [info] update#ctor - updates are disabled due to running as Admin in user setup
+2026-09-26 13:19:58.279 [info] [shared storage] Fallback application storage initialized with 124 items
+2026-09-26 13:19:59.483 [info] AgentHostProcessManager: agent host started
+2026-09-26 13:20:01.012 [error] [AgentHost:stderr] (node:7652) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+(Use `Code --trace-deprecation ...` to show where the warning was created)
+
